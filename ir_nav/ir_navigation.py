@@ -21,20 +21,32 @@ class IRNavigation(Node):
         self.goal_publisher = self.create_publisher(PoseStamped, '/goal_pose', 10)
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
+        self.goal_published = False
 
     def timer_callback(self):
         ir_value = GPIO.input(self.ir_pin)
-        if ir_value == 1:
+        if ir_value == 1 and not self.goal_published:
             self.get_logger().info('IR Sensor: Triggered, waiting for 20 seconds before sending the robot to the home position.')
             thread = threading.Thread(target=self.delayed_goal_publish)
             thread.start()
 
     def delayed_goal_publish(self):
         time.sleep(10)  # Add 20-second delay
-        self.publish_goal()
+        consistent_readings = 0
+        num_checks = 10  # Check the sensor value 10 times
+
+        for _ in range(num_checks):
+            ir_value = GPIO.input(self.ir_pin)
+            if ir_value == 1:
+                consistent_readings += 1
+            time.sleep(0.5)  # Sleep for 0.5 seconds between checks
+
+        if consistent_readings == num_checks:
+            self.publish_goal()
 
     def publish_goal(self):
         self.goal_publisher.publish(self.home_pose)
+        self.goal_published = True
 
 def main(args=None):
     rclpy.init(args=args)
